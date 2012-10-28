@@ -193,17 +193,17 @@ ostream &operator<<(ostream &os, const Field &f) {
 
   os << "7: deck " << (f.deckNull() ? "<null>" : "**") << endl;
   os << "8: openedDeck ";
-  if ( f.deckit == f.deck.begin() )
+  if ( f.getDeckit() == f.getDeck().begin() )
     os << "<null>";
   else {
-    list<int>::iterator it = f.deckit;
+    list<int>::iterator it = f.getDeckit();
     outputcard(os, *(--it));
   }
   os << endl;
 
   os << "9: finished ";
   for(int i = 0; i < 4; ++i)
-    os << suitArray[i] << ":" << f.finished[i] << " ";
+    os << suitArray[i] << ":" << f.getFinished()[i] << " ";
   os << endl;
 
 
@@ -211,16 +211,17 @@ ostream &operator<<(ostream &os, const Field &f) {
 
   for(int i = 0; i < 7; ++i) {
     os << i << ": ";
-    foreach(int i, f.r[i])
+    for(int j = 0; j < f.numReversed(i); ++j)
       os << "*";
     os << " ";
-    foreach(int i, f.o[i])
+    foreach(int i, f.getOpened()[i])
       outputcard(os, i) << " ";
     os << endl;
   }
 
   os << endl << "------------" << endl << endl;
 
+  return os;
 }
 
 

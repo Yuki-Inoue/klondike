@@ -20,30 +20,39 @@ using std::endl;
 using std::make_pair;
 using std::string;
 
-Field::Field() : o(7), r(7) {
-  Shuffle s(52);
+Field::Field() {
   for(int i = 0; i < 4; ++i)
-    finished[i] = 0;
+    finished_[i] = 0;
+
+  Shuffle s(52);
   for(int i = 0; i < 7; ++i)
-    o[i].push_back(s.get());
+    opened_[i].push_back(s.get());
   for(int i = 0; i < 7; ++i)
     for(int j = 0; j < i; ++j)
-      r[i].push_back(s.get());
+      reversed_[i].push_back(s.get());
   while(!s.empty())
-    deck.push_back(s.get());
-  deckit = deck.begin();
+    reversedDeck_.push_back(s.get());
 }
 
-bool movable_base(int dst, int src_top, int src_back) {
+// given the top(the largest) and the bottom (the smallest)
+// of continuous pile, consider if it is movable right under the dst card.
+bool movable_base(int dst, int src_top, int src_bottom) {
   return
-    !(dst%13 > src_top%13 + 1
-      || src_back%13 >= dst%13
-      || (dst/26 + src_back/26 + dst%13 - src_back%13) % 2 != 0);
+
+    // first 2 rows check if the number is all right.
+    !(getNumber(dst) > getNumber(src_top) + 1
+      || getNumber(src_bottom) >= getNumber(dst)
+
+      // and this row checks if the color is all right.
+      || (getColor(dst)
+	  + getColor(src_back)
+	  + getNumber(dst)
+	  - getNumber(src_back)) % 2 != 0);
+
 }
 
 void Field::move(IntPair act) {
   assert( max(act.first,act.second) < 7 && min(act.first,act.second) >= 0 );
-
 
   list<int> &srclist = o[act.first];
   if(srclist.empty())
@@ -65,8 +74,6 @@ void Field::move(IntPair act) {
     return;
   }
 
-
-
   int dst = dstlist.back();
   int ofs = dst%13 - src_back % 13;
 
@@ -81,82 +88,62 @@ void Field::move(IntPair act) {
 }
 
 void Field::moveup(int pile) {
-  if(o[pile].empty())
+  if(opened_[pile].empty())
     return;
 
-  list<int> &openlist = o[pile];
+  list<int> &openlist = opened_[pile];
   int card = openlist.back();
-  if( finished[card/13] == card % 13 ) {
-    ++finished[card/13];
+  if( finished_[getSuit(card)] == getNumber(card) ) {
+    ++finished_[getSuit(card)];
     openlist.pop_back();
   }
 }
 
 void Field::movedown(int pile) {
-  if(deckit == deck.begin())
+  if( openedDeck_.empty() )
     return;
 
-  list<int> &dstlist = o[pile];
-  --deckit;
-  int movablecard = *deckit;
+  int moving_card = openedDeck_.front();
+  list<int> &dstlist = opened_[pile];
 
   if(dstlist.empty()) {
-    if( movablecard % 13 == 12) {
-      dstlist.splice(dstlist.begin(), deck, deckit++);
-    }
-    return;
+    if( getNumber(moving_card) == 12)
+      goto MOVE;
   }
+  else {
+    int dstcard = dstlist.back();
+    if( movable_base( dstcard, moving_card, moving_card) )
+      goto MOVE;
+  }
+  return;
 
-  int dstcard = dstlist.back();
-  if( movable_base( dstcard, movablecard, movablecard) ) {
-    dstlist.splice( dstlist.end(), deck, deckit++ );
-  }
-  else
-    ++deckit;
+ MOVE:
+  dstlist.splice( dstlist.end(), openedDeck_, openedDeck_.begin() );
 }
 
-void Field::movedirect() {
-  if(deckit == deck.begin())
+void Field::moveDirect() {
+  if( openedDeck_.empty() )
     return;
 
-  --deckit;
-  int card = *deckit;
-  if( finished[card/13] == card % 13 ) {
-    ++finished[card/13];
-    deck.erase(deckit++);
+  int card = openedDeck_.front();
+  int suit = getSuit(card);
+  if( finished[suit] == getNumber(card) ) {
+    ++finished[suit];
+    openedDeck_.pop_front();
   }
-
 }
 
 void Field::flipDeck(int n) {
-  if(deckit == deck.end() )
-    deckit = deck.begin();
-  for(int i = 0; deckit != deck.end() && i < n; ++i)
-    ++deckit;
+  for(int i = 0; reversedDeck_.empty() && i < n; ++i)
+    openedDeck_.splice(openedDeck_.begin(), reversedDeck_, --reversedDeck_.end());
 }
 
 void Field::flipReversed(int n) {
-  if( !o[n].empty() || r[n].empty() )
+  if( r[n].empty() )
     return;
 
   o[n].push_back(r[n].back());
   r[n].pop_back();
-}
-
-void Field::resetDeck() {
-  deckit = deck.begin();
-}
-
-bool Field::openedDeckNull () const {
-  return deckit == deck.begin();
-}
-
-bool Field::openPileNull (int i) const {
-  return o[i].empty();
-}
-
-bool Field::deckNull () const {
-  return deckit == deck.end();
 }
 
 

@@ -1,0 +1,4 @@
+
+CXX = c++
+
+CXXProgram(klondike, commandline_klondike shuffle klondike )

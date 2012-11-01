@@ -1,5 +1,7 @@
 #include "klondike.hh"
 #include "shuffle.hh"
+
+#include <vector>
 #include <algorithm>
 #include <boost/foreach.hpp>
 #include <iostream>
@@ -9,7 +11,6 @@
 
 #define foreach BOOST_FOREACH
 
-typedef std::pair<int,int> IntPair;
 using std::max;
 using std::min;
 using std::list;
@@ -20,19 +21,39 @@ using std::endl;
 using std::make_pair;
 using std::string;
 
-Field::Field() {
-  for(int i = 0; i < 4; ++i)
-    finished_[i] = 0;
+struct KlondikeImpl {
+  std::vector<int> reversed_[7];
+  // the smallest number the bottom
+  std::list<int> opened_[7];
+  int finished_[4];
 
-  Shuffle s(52);
+  // openedDeck: visible from user.
+  //   the top is the operable.
+  std::list<int> openedDeck_;
+  // unvisible from user.
+  //   the top is the last one to be visible.
+  std::list<int> reversedDeck_;
+};
+
+
+Klondike::Klondike() {
+  pImpl_ = new KlondikeImpl;
+
+  for(int i = 0; i < 4; ++i)
+    pImpl_->finished_[i] = 0;
+
+  Shuffle<> s(52);
   for(int i = 0; i < 7; ++i)
-    opened_[i].push_back(s.get());
+    pImpl_->opened_[i].push_back(s.get());
   for(int i = 0; i < 7; ++i)
     for(int j = 0; j < i; ++j)
-      reversed_[i].push_back(s.get());
-  while(!s.empty())
-    reversedDeck_.push_back(s.get());
+      pImpl_->reversed_[i].push_back(s.get());
+  while(s.size() > 0)
+    pImpl_->reversedDeck_.push_back(s.get());
 }
+
+Klondike::~Klondike(){ delete pImpl_; }
+
 
 // given the top(the largest) and the bottom (the smallest)
 // of continuous pile, consider if it is movable right under the dst card.
@@ -45,66 +66,58 @@ bool movable_base(int dst, int src_top, int src_bottom) {
 
       // and this row checks if the color is all right.
       || (getColor(dst)
-	  + getColor(src_back)
+	  + getColor(src_bottom)
 	  + getNumber(dst)
-	  - getNumber(src_back)) % 2 != 0);
+	  - getNumber(src_bottom)) % 2 != 0);
 
 }
 
-void Field::move(IntPair act) {
-  assert( max(act.first,act.second) < 7 && min(act.first,act.second) >= 0 );
+void Klondike::move(Pile src_pile, Pile dst_pile) {
 
-  list<int> &srclist = o[act.first];
+  list<int> &srclist = pImpl_->opened_[src_pile];
   if(srclist.empty())
     return;
 
-  list<int> &dstlist = o[act.second];
+  list<int> &dstlist = pImpl_->opened_[dst_pile];
   int src_back = srclist.back();
   int src_top = srclist.front();
 
   if(dstlist.empty()) {
-    if (src_top % 13 != 12)
+    if (getNumber(src_top) != 12)
       return;
-
-    dstlist.splice
-      (dstlist.end(),
-       srclist,
-       srclist.begin(),
-       srclist.end());
+    dstlist.splice(dstlist.end(), srclist);
     return;
   }
 
   int dst = dstlist.back();
-  int ofs = dst%13 - src_back % 13;
+  int ofs = getNumber(dst) - getNumber(src_back);
 
   if(movable_base(dst, src_top, src_back)) {
     list<int>::iterator it, itend;
     it = itend = srclist.end();
-    for(int i = 0; i < ofs; ++i)
-      --it;
+    std::advance(it, -ofs);
     dstlist.splice(dstlist.end(), srclist, it, itend);
   }
-
 }
 
-void Field::moveup(int pile) {
-  if(opened_[pile].empty())
+void Klondike::moveUp(Pile pile) {
+  if(pImpl_->opened_[pile].empty())
     return;
 
-  list<int> &openlist = opened_[pile];
+  list<int> &openlist = pImpl_->opened_[pile];
   int card = openlist.back();
-  if( finished_[getSuit(card)] == getNumber(card) ) {
-    ++finished_[getSuit(card)];
+  if( pImpl_->finished_[getSuit(card)] == getNumber(card) ) {
+    ++pImpl_->finished_[getSuit(card)];
     openlist.pop_back();
   }
 }
 
-void Field::movedown(int pile) {
-  if( openedDeck_.empty() )
+void Klondike::moveDown(Pile pile) {
+  if( pImpl_->openedDeck_.empty() )
     return;
 
-  int moving_card = openedDeck_.front();
-  list<int> &dstlist = opened_[pile];
+  int moving_card = pImpl_->openedDeck_.front();
+  list<int> &dstlist = pImpl_->opened_[pile];
 
   if(dstlist.empty()) {
     if( getNumber(moving_card) == 12)
@@ -118,138 +131,65 @@ void Field::movedown(int pile) {
   return;
 
  MOVE:
-  dstlist.splice( dstlist.end(), openedDeck_, openedDeck_.begin() );
+  dstlist.splice( dstlist.end(), pImpl_->openedDeck_, pImpl_->openedDeck_.begin() );
 }
 
-void Field::moveDirect() {
-  if( openedDeck_.empty() )
+void Klondike::moveDirect() {
+  if( pImpl_->openedDeck_.empty() )
     return;
 
-  int card = openedDeck_.front();
+  int card = pImpl_->openedDeck_.front();
   int suit = getSuit(card);
-  if( finished[suit] == getNumber(card) ) {
-    ++finished[suit];
-    openedDeck_.pop_front();
+  if( pImpl_->finished_[suit] == getNumber(card) ) {
+    ++pImpl_->finished_[suit];
+    pImpl_->openedDeck_.pop_front();
   }
 }
 
-void Field::flipDeck(int n) {
-  for(int i = 0; reversedDeck_.empty() && i < n; ++i)
-    openedDeck_.splice(openedDeck_.begin(), reversedDeck_, --reversedDeck_.end());
+void Klondike::flipDeck(unsigned n) {
+  for(int i = 0; !pImpl_->reversedDeck_.empty() && i < n; ++i)
+    pImpl_->openedDeck_.splice
+      (pImpl_->openedDeck_.begin(), pImpl_->reversedDeck_, --pImpl_->reversedDeck_.end());
 }
 
-void Field::flipReversed(int n) {
-  if( r[n].empty() )
+void Klondike::flipReversed(Pile n) {
+  if( pImpl_->reversed_[n].empty() )
     return;
+  pImpl_->opened_[n].push_back(pImpl_->reversed_[n].back());
+  pImpl_->reversed_[n].pop_back();
+}
 
-  o[n].push_back(r[n].back());
-  r[n].pop_back();
+void Klondike::resetDeck ()
+{ pImpl_->reversedDeck_.splice(pImpl_->reversedDeck_.end(), pImpl_->openedDeck_); }
+
+
+
+bool Klondike::revDeckEmpty() const { return pImpl_->reversedDeck_.empty(); }
+unsigned Klondike::revDeckSize() const { return pImpl_->reversedDeck_.size(); }
+
+bool Klondike::openedDeckEmpty() const { return pImpl_->openedDeck_.empty(); }
+unsigned Klondike::openedDeckSize() const { return pImpl_->openedDeck_.size(); }
+
+bool Klondike::reversedEmpty(Pile pile) const { return pImpl_->reversed_[pile].empty(); }
+unsigned Klondike::reversedSize(Pile pile) const { return pImpl_->reversed_[pile].size(); }
+
+bool Klondike::openedEmpty(Pile pile) const { return pImpl_->opened_[pile].empty(); }
+unsigned Klondike::openedSize(Pile pile) const { return pImpl_->opened_[pile].size(); }
+
+
+
+Klondike::const_card_range Klondike::getOpenedDeck() const {
+  const list<int> &openedDeck = pImpl_->openedDeck_;
+  return make_pair(openedDeck.begin(), openedDeck.end());
 }
 
 
-
-//  for test
-string suitArray[] = {"S","C","H","D"};
-
-
-ostream &outputcard(ostream &os, int card) {
-
-  os << suitArray[card/13];
-
-  switch(card % 13) {
-  case 9:
-    os << "D";
-    break;
-  case 10:
-    os << "J";
-    break;
-  case 11:
-    os << "Q";
-    break;
-  case 12:
-    os << "K";
-    break;
-  default:
-    os << card % 13 + 1;
-    break;
-  }
-  return os;
-}
-
-ostream &operator<<(ostream &os, const Field &f) {
-
-  os << "7: deck " << (f.deckNull() ? "<null>" : "**") << endl;
-  os << "8: openedDeck ";
-  if ( f.getDeckit() == f.getDeck().begin() )
-    os << "<null>";
-  else {
-    list<int>::iterator it = f.getDeckit();
-    outputcard(os, *(--it));
-  }
-  os << endl;
-
-  os << "9: finished ";
-  for(int i = 0; i < 4; ++i)
-    os << suitArray[i] << ":" << f.getFinished()[i] << " ";
-  os << endl;
-
-
-  os << endl;
-
-  for(int i = 0; i < 7; ++i) {
-    os << i << ": ";
-    for(int j = 0; j < f.numReversed(i); ++j)
-      os << "*";
-    os << " ";
-    foreach(int i, f.getOpened()[i])
-      outputcard(os, i) << " ";
-    os << endl;
-  }
-
-  os << endl << "------------" << endl << endl;
-
-  return os;
+Klondike::const_card_range Klondike::getOpened(Pile p) const {
+  const list<int> &opened = pImpl_->opened_[p];
+  return make_pair(opened.begin(), opened.end());
 }
 
 
-int main() {
-
-  Field f;
-  while(true) {
-    cout << f;
-    int i1,i2;
-    cin >> i1;
-
-    if(i1 == 7) {
-      if(f.deckNull())
-	f.resetDeck();
-      else
-	f.flipDeck(3);
-      continue;
-    }
-
-    if(i1 == 8){
-      cin >> i2;
-      if(i2 == 9)
-	f.movedirect();
-      else
-	f.movedown(i2);
-      continue;
-    }
-
-    if(f.openPileNull(i1)) {
-      f.flipReversed(i1);
-      continue;
-    }
-
-    cin >> i2;
-    if (i2 == 9) {
-      f.moveup(i1);
-      continue;
-    }
-
-    f.move(make_pair(i1,i2));
-  }
-
-  return 0;
+int Klondike::getFinished(Suit s) const {
+  return pImpl_->finished_[s];
 }

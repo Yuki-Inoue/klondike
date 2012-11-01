@@ -1,32 +1,39 @@
 #ifndef KLONDIKE_HH_
 #define KLONDIKE_HH_
 
-#include <vector>
 #include <list>
 #include <utility>
 
+#include "trump.hpp"
+
+
+class Pile {
+  int v_;
+public:
+  Pile(int i = 0) : v_(i) {
+    if( i<0 || i>=7) throw "Pile range error";
+  }
+  operator int(){ return v_; }
+};
+
+
+class KlondikeImpl;
 
 
 // when not crushing, the field satisfies following consistency:
 // * there exists 52 cards in field
 // * the opened are in alternate coloring descending order.
-class Field {
+class Klondike {
 
-  std::vector<int> reversed_[7];
-  // the smallest number the bottom
-  std::list<int> opened_[7];
-  int finished_[4];
+public:
+  typedef std::list<int>::const_iterator const_card_iterator;
+  typedef std::pair<const_card_iterator,const_card_iterator> const_card_range;
 
-  // openedDeck: visible from user.
-  //   the top is the operable.
-  std::list<int> openedDeck_;
-  // unvisible from user.
-  //   the top is the last one to be visible.
-  std::list<int> reversedDeck_;
 
   // constructor
 public:
-  Field();
+  Klondike();
+  ~Klondike();
 
   // operations
 public:
@@ -39,25 +46,34 @@ public:
   // from openDeck_ to finished_
   void moveDirect ();
   // flip deck by n cards
-  void flipDeck (Pile n);
+  void flipDeck (unsigned n);
   // flip the reversed[pile] card.
   void flipReversed (Pile pile);
   // make deck all reversed.
-  void resetDeck ()
-  { reversedDeck_.splice(reversedDeck_.end(), openDeck_); }
+  void resetDeck ();
 
   // attributes
 public:
-  bool revDeckEmpty() const { return reversedDeck_.empty(); }
-  int revDeckSize() const { return reversedDeck_.size(); }
-  bool reversedEmpty(Pile pile) const { return reversed_[pile].empty(); }
-  int reversedSize(Pile pile) const { return reversed_[pile].size(); }
+  bool revDeckEmpty() const;
+  unsigned revDeckSize() const;
+
+  bool openedDeckEmpty() const;
+  unsigned openedDeckSize() const;
+
+  bool reversedEmpty(Pile pile) const;
+  unsigned reversedSize(Pile pile) const;
+
+  bool openedEmpty(Pile pile) const;
+  unsigned openedSize(Pile pile) const;
 
   // accessor
 public:
-  const std::list<int> &getOpenedDeck() const { return openedDeck_; }
-  const std::list<int> (&getOpened())[7] const { return opened_; }
-  const int (&getFinished())[4] const { return finished_; }
+  const_card_range getOpenedDeck() const;
+  const_card_range getOpened(Pile p) const;
+  int getFinished(Suit s) const;
+
+private:
+  KlondikeImpl *pImpl_;
 };
 
 #endif
